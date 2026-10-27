@@ -24,10 +24,10 @@ Mục tiêu là xây dựng một Backend API có xác thực, phân quyền, qu
 
 ### 3.2. Quản lý ticket
 
-- Employee tạo ticket gồm tiêu đề, mô tả, danh mục và mức độ ưu tiên.
+- Employee hoặc Admin tạo ticket gồm tiêu đề, mô tả, danh mục và mức độ ưu tiên; Support Agent không được tạo ticket trong phiên bản hiện tại.
 - Người tạo được xác định từ tài khoản đăng nhập.
 - Người dùng xem danh sách ticket theo quyền của mình.
-- Ticket hỗ trợ lọc theo trạng thái, mức độ ưu tiên và người phụ trách.
+- API danh sách ticket hỗ trợ lọc theo trạng thái (`status`) và phân trang bằng `limit`, `offset`. Chưa có tham số API lọc riêng theo mức ưu tiên hoặc người phụ trách.
 - Admin phân công ticket cho Support Agent.
 - Support Agent cập nhật trạng thái ticket được giao.
 
@@ -50,7 +50,7 @@ Nếu cần xử lý lại, ticket `RESOLVED` có thể quay về `IN_PROGRESS`.
 
 - Người dùng có quyền truy cập ticket được phép trao đổi theo quy tắc phân quyền.
 - Không cho phép thêm bình luận vào ticket đã `CLOSED`.
-- Hệ thống lưu lịch sử thay đổi trạng thái và phân công.
+- Hệ thống ghi sự kiện tạo ticket (`TICKET_CREATED`), phân công (`TICKET_ASSIGNED`), thay đổi trạng thái (`STATUS_CHANGED`) và thêm bình luận (`COMMENT_ADDED`).
 - Mỗi sự kiện phải có người thực hiện và thời điểm xảy ra.
 
 ### 3.5. Thống kê
@@ -75,7 +75,7 @@ Cung cấp API thống kê số ticket theo trạng thái và mức độ ưu ti
 Bao gồm:
 
 - Xác thực và phân quyền.
-- Tạo, xem, lọc và cập nhật ticket.
+- Tạo và xem ticket; lọc theo trạng thái, phân trang; cập nhật thông qua thao tác phân công và chuyển trạng thái (chưa có API sửa tự do các trường ticket).
 - Phân công ticket.
 - Chuyển trạng thái.
 - Bình luận và lịch sử xử lý.
