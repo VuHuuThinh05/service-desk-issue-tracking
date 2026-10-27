@@ -1,0 +1,156 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Desk | Quản lý yêu cầu hỗ trợ</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+    <div id="login-page" class="login-layout">
+        <section class="login-intro">
+            <div class="brand"><span class="brand-icon">S</span> Service Desk</div>
+            <div>
+                <p class="eyebrow">INTERNAL SUPPORT PLATFORM</p>
+                <h1>Quản lý yêu cầu hỗ trợ trong một nơi.</h1>
+                <p class="intro-text">
+                    Tiếp nhận, theo dõi và xử lý các sự cố nội bộ một cách rõ ràng.
+                </p>
+            </div>
+            <p class="intro-footer">Service Desk & Issue Tracking System</p>
+        </section>
+
+        <main class="login-panel">
+            <form id="login-form" class="login-card">
+                <p class="eyebrow">CHÀO MỪNG TRỞ LẠI</p>
+                <h2>Đăng nhập</h2>
+                <p class="muted">Đăng nhập để tiếp tục công việc của bạn.</p>
+
+                <label for="email">Email</label>
+                <input id="email" name="email" type="email"
+                       placeholder="you@example.com" autocomplete="username" required>
+
+                <label for="password">Mật khẩu</label>
+                <input id="password" name="password" type="password"
+                       placeholder="Nhập mật khẩu" autocomplete="current-password" required>
+
+                <p id="login-error" class="error-message" role="alert"></p>
+                <button id="login-button" type="submit" class="primary-button">
+                    Đăng nhập
+                </button>
+                <p class="login-note">Sử dụng tài khoản đã được tạo trong hệ thống.</p>
+            </form>
+        </main>
+    </div>
+
+    <div id="dashboard-page" class="app-layout" hidden>
+        <aside class="sidebar">
+            <div class="brand"><span class="brand-icon">S</span> Service Desk</div>
+
+            <p class="nav-heading">KHÔNG GIAN LÀM VIỆC</p>
+            <button id="overview-nav" class="nav-item active" type="button">
+                <span>▦</span> Tổng quan
+            </button>
+            <button class="nav-item" id="tickets-nav" type="button">
+                <span>▤</span> Yêu cầu hỗ trợ
+            </button>
+            <button class="nav-item" id="users-nav" type="button" hidden>
+                <span>♙</span> Người dùng
+            </button>
+
+            <div class="sidebar-bottom">
+                <div class="avatar" id="user-avatar">U</div>
+                <div class="sidebar-user">
+                    <strong id="sidebar-name">Người dùng</strong>
+                    <span id="sidebar-role">EMPLOYEE</span>
+                </div>
+                <button id="logout-button" class="logout-button" type="button"
+                        title="Đăng xuất" aria-label="Đăng xuất">↪</button>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <div>
+                    <p class="eyebrow">WORKSPACE / OVERVIEW</p>
+                    <h1>Tổng quan</h1>
+                </div>
+                <div class="user-chip">
+                    <span class="status-dot"></span>
+                    <span id="header-name">Người dùng</span>
+                </div>
+            </header>
+
+            <section class="welcome-banner">
+                <div>
+                    <p class="eyebrow">SERVICE DESK</p>
+                    <h2>Xin chào, <span id="welcome-name">bạn</span>!</h2>
+                    <p>Theo dõi tình hình xử lý yêu cầu hỗ trợ của bạn tại đây.</p>
+                </div>
+                <div class="banner-symbol">◎</div>
+            </section>
+
+            <div class="section-heading">
+                <div>
+                    <h2>Chỉ số yêu cầu</h2>
+                    <p class="muted">Dữ liệu được lấy trực tiếp từ hệ thống.</p>
+                </div>
+                <button id="refresh-button" class="secondary-button" type="button">
+                    ↻ Làm mới
+                </button>
+            </div>
+
+            <p id="dashboard-error" class="error-message" role="alert"></p>
+
+            <section class="stats-grid" aria-label="Thống kê yêu cầu">
+                <article class="stat-card">
+                    <div class="stat-top"><span>Tổng yêu cầu</span><span class="stat-icon">▤</span></div>
+                    <strong id="total-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Yêu cầu trong phạm vi của bạn</span>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-top"><span>Đang mở</span><span class="stat-icon orange">◷</span></div>
+                    <strong id="open-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Chờ được xử lý</span>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-top"><span>Đang xử lý</span><span class="stat-icon blue">↻</span></div>
+                    <strong id="progress-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Đang được tiếp nhận</span>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-top"><span>Đã giải quyết</span><span class="stat-icon green">✓</span></div>
+                    <strong id="resolved-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Đã xử lý xong</span>
+                </article>
+                <article class="stat-card">
+                    <div class="stat-top"><span>Đã đóng</span><span class="stat-icon">▣</span></div>
+                    <strong id="closed-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Yêu cầu đã kết thúc</span>
+                </article>
+                <article class="stat-card priority-card">
+                    <div class="stat-top"><span>Ưu tiên cao</span><span class="stat-icon red">!</span></div>
+                    <strong id="high-tickets" class="stat-number">—</strong>
+                    <span class="stat-caption">Yêu cầu mức HIGH</span>
+                </article>
+            </section>
+
+            <section class="info-panel">
+                <div class="info-icon">i</div>
+                <div>
+                    <h3>Phạm vi dữ liệu</h3>
+                    <p id="scope-description">
+                        Thống kê được giới hạn theo quyền của tài khoản đang đăng nhập.
+                    </p>
+                </div>
+            </section>
+
+            <footer class="page-footer">
+                Service Desk & Issue Tracking System · Internal Support
+            </footer>
+        </main>
+    </div>
+</body>
+</html>
