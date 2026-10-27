@@ -1,233 +1,404 @@
-# Service Desk & Issue Tracking
+# Service Desk & Issue Tracking System
 
-Hệ thống quản lý yêu cầu hỗ trợ nội bộ (ticket), được xây dựng bằng FastAPI, SQLAlchemy và PostgreSQL. Dự án minh họa quy trình tiếp nhận ticket, phân quyền người dùng, phân công nhân viên hỗ trợ, cập nhật trạng thái, trao đổi bình luận và lưu lịch sử xử lý.
+**Backend-focused portfolio project** · Python · FastAPI · PostgreSQL · Docker
 
-## 1. Chức năng hiện có
+Hệ thống quản lý yêu cầu hỗ trợ nội bộ (**service desk**), nơi nhân viên gửi ticket, quản trị viên phân công nhân viên hỗ trợ và người phụ trách cập nhật tiến độ xử lý. Dự án tập trung vào **REST API, xác thực JWT, phân quyền theo vai trò, quy tắc nghiệp vụ, thiết kế cơ sở dữ liệu và kiểm thử**; đi kèm giao diện web đơn giản để minh họa các thao tác.
 
-- **Xác thực:** đăng nhập bằng email/mật khẩu, cấp JWT access token và lấy thông tin tài khoản hiện tại.
-- **Quản lý người dùng:** Admin xem danh sách, tạo tài khoản và bật/tắt trạng thái hoạt động.
-- **Quản lý ticket:** tạo ticket, xem danh sách và chi tiết theo quyền truy cập.
-- **Lọc và phân trang:** danh sách ticket hỗ trợ lọc theo trạng thái (status), cùng tham số limit và offset.
-- **Phân công:** Admin giao ticket cho Support Agent đang hoạt động.
-- **Quy trình trạng thái:** Support Agent được giao ticket có thể chuyển trạng thái theo các quy tắc được triển khai.
-- **Bình luận và lịch sử:** xem/thêm bình luận, xem các sự kiện của ticket; không cho thêm bình luận khi ticket đã đóng.
-- **Dashboard:** thống kê ticket theo trạng thái và một số mức ưu tiên, với phạm vi dữ liệu phụ thuộc vai trò.
-- **Giao diện demo:** frontend HTML, CSS và JavaScript được phục vụ bởi ứng dụng FastAPI.
+> **Phạm vi triển khai:** Đây là một ứng dụng FastAPI theo kiến trúc *modular monolith*, không phải hệ thống microservices. Các chức năng mô tả dưới đây được đối chiếu với mã nguồn hiện tại. SLA, thông báo tự động và CI/CD chưa được triển khai.
 
-> Lưu ý về phạm vi: API danh sách ticket hiện hỗ trợ lọc theo trạng thái, không có bộ lọc query riêng theo priority hoặc assignee. Tài liệu này mô tả hành vi đang có, không xem các chức năng dự kiến là chức năng đã hoàn thành.
+## Mục lục
 
-## 2. Vai trò người dùng
+1. [Chức năng và vai trò](#1-chức-năng-và-vai-trò)
+2. [Công nghệ](#2-công-nghệ)
+3. [Kiến trúc và cách hệ thống hoạt động](#3-kiến-trúc-và-cách-hệ-thống-hoạt-động)
+4. [Cấu trúc thư mục](#4-cấu-trúc-thư-mục)
+5. [Cơ sở dữ liệu và vòng đời ticket](#5-cơ-sở-dữ-liệu-và-vòng-đời-ticket)
+6. [Hướng dẫn chạy dự án](#6-hướng-dẫn-chạy-dự-án)
+7. [API và hướng dẫn sử dụng](#7-api-và-hướng-dẫn-sử-dụng)
+8. [Kiểm thử](#8-kiểm-thử)
+9. [Hình ảnh minh chứng](#9-hình-ảnh-minh-chứng)
+10. [Giới hạn và hướng phát triển](#10-giới-hạn-và-hướng-phát-triển)
 
-| Vai trò | Quyền chính theo triển khai hiện tại |
+## 1. Chức năng và vai trò
+
+### Các chức năng đã có
+
+- **Authentication:** đăng nhập bằng email và mật khẩu, cấp JWT access token; lấy thông tin người dùng từ token.
+- **User Management:** Admin xem danh sách, tạo tài khoản và kích hoạt/vô hiệu hóa tài khoản.
+- **Ticket Management:** tạo ticket, xem danh sách và chi tiết theo phạm vi quyền truy cập; lọc danh sách theo `status`, phân trang bằng `limit` và `offset`.
+- **Assignment:** Admin phân công ticket cho Support Agent đang hoạt động.
+- **Ticket Workflow:** Support Agent được phân công chuyển trạng thái ticket theo các quy tắc hợp lệ.
+- **Comments & Audit Trail:** xem/thêm bình luận và đọc lịch sử sự kiện; không thêm bình luận vào ticket đã đóng.
+- **Dashboard:** tổng hợp số ticket theo trạng thái và mức ưu tiên HIGH/URGENT, với dữ liệu được giới hạn theo vai trò.
+- **Demo UI:** giao diện HTML/CSS/JavaScript phục vụ trực tiếp qua FastAPI.
+
+### Phân quyền
+
+| Vai trò | Phạm vi thao tác chính |
 |---|---|
-| EMPLOYEE | Tạo ticket và truy cập ticket do mình tạo. |
-| SUPPORT_AGENT | Truy cập ticket được giao cho mình, chuyển trạng thái và trao đổi trong ticket có quyền truy cập. |
-| ADMIN | Quản lý người dùng, xem toàn bộ ticket và phân công ticket cho Support Agent. |
+| `EMPLOYEE` | Tạo ticket; xem ticket do chính mình tạo; xem/thêm bình luận và lịch sử của ticket có quyền truy cập. |
+| `SUPPORT_AGENT` | Xem ticket được giao; chuyển trạng thái ticket được giao; trao đổi và xem lịch sử trên ticket được phép truy cập. |
+| `ADMIN` | Xem toàn bộ ticket; quản lý tài khoản; phân công ticket cho Support Agent; có thể tạo ticket. |
 
-Các kiểm tra quyền được thực hiện ở backend. Việc giao ticket cho Support Agent đang hoạt động được giới hạn cho Admin.
+**Một số ràng buộc nghiệp vụ:** chỉ Admin phân công ticket; người nhận phải là Support Agent đang hoạt động; ticket `CLOSED` không được phân công lại hoặc bình luận thêm. Chỉ Support Agent được giao mới được chuyển trạng thái. Backend kiểm tra quyền cho từng endpoint, không chỉ dựa vào giao diện.
 
-## 3. Công nghệ sử dụng
+## 2. Công nghệ
 
-| Công nghệ | Vai trò |
-|---|---|
-| Python 3.11 | Ngôn ngữ backend |
-| FastAPI | REST API và OpenAPI documentation |
-| Pydantic / pydantic-settings | Kiểm tra dữ liệu và đọc cấu hình |
-| SQLAlchemy | ORM và truy vấn dữ liệu |
-| PostgreSQL 16 | Cơ sở dữ liệu |
-| Alembic | Quản lý migration |
-| JWT (PyJWT) | Access token |
-| Argon2 (pwdlib) | Băm và xác minh mật khẩu |
-| pytest, HTTPX, TestClient | Kiểm thử |
-| Docker, Docker Compose | Đóng gói và chạy dịch vụ |
-| HTML, CSS, JavaScript | Giao diện demo |
+| Thành phần | Công nghệ | Mục đích |
+|---|---|---|
+| Backend | Python 3.11, FastAPI, Uvicorn | Xây dựng và chạy REST API |
+| Validation & settings | Pydantic, pydantic-settings | Kiểm tra request/response, đọc biến môi trường |
+| Database | PostgreSQL 16 | Lưu dữ liệu nghiệp vụ |
+| Data access | SQLAlchemy, psycopg | ORM, truy vấn và kết nối PostgreSQL |
+| Migrations | Alembic | Quản lý phiên bản schema |
+| Security | PyJWT, pwdlib/Argon2 | JWT và băm/xác minh mật khẩu |
+| Testing | pytest, HTTPX, FastAPI TestClient | Kiểm thử API và quy tắc nghiệp vụ |
+| Deployment | Docker, Docker Compose | Đóng gói API và chạy cùng PostgreSQL |
+| Frontend | HTML, CSS, JavaScript | Giao diện demo |
+| API documentation | OpenAPI, Swagger UI, ReDoc | Tra cứu và thử endpoint |
 
-## 4. Kiến trúc và cấu trúc thư mục
-
-Dự án sử dụng kiểu **modular monolith**: backend chạy trong một ứng dụng FastAPI, được tổ chức theo các module chức năng.
+## 3. Kiến trúc và cách hệ thống hoạt động
 
 ![System Architecture](docs/images/system-architecture.png)
 
+*Hình 1 — Kiến trúc triển khai: Docker Compose điều phối hai dịch vụ `api` (FastAPI) và `db` (PostgreSQL); trình duyệt và công cụ kiểm thử gửi request đến API.*
+
+Hệ thống theo kiểu **modular monolith**: một backend FastAPI chứa các module riêng, kết nối đến một cơ sở dữ liệu PostgreSQL. Các thành phần chính:
+
+| Lớp / thành phần | Trách nhiệm |
+|---|---|
+| **Presentation (Frontend)** | `frontend/` gồm HTML, CSS và JavaScript. FastAPI phục vụ tệp tĩnh tại `/`; frontend gọi REST API để thao tác ticket. |
+| **API Layer (Routers)** | `app/api/v1/` nhận request cho auth, users, tickets và dashboard; trả HTTP response theo schema. |
+| **Validation & Security** | Pydantic xác thực dữ liệu; `get_current_user` kiểm tra JWT và tài khoản đang hoạt động; kiểm tra vai trò và quyền truy cập tài nguyên tại backend. |
+| **Business Logic** | `app/services/ticket_service.py` xử lý tạo/phân công ticket, chuyển trạng thái, kiểm tra quyền và ghi lịch sử. |
+| **Persistence Layer** | SQLAlchemy models và session thực hiện đọc/ghi dữ liệu. **Một số router truy vấn SQLAlchemy trực tiếp**; dự án không có package Repository riêng. |
+| **Database** | PostgreSQL lưu các bảng `users`, `tickets`, `comments`, `ticket_events`. |
+| **Migration** | Alembic quản lý thay đổi cấu trúc bảng. Migration là thao tác riêng, **không tự động chạy** chỉ bởi `docker compose up`. |
+| **Runtime / Containers** | `Dockerfile` đóng gói FastAPI; `docker-compose.yml` chạy `api` và `db`, kết nối qua hostname nội bộ `db:5432` và duy trì dữ liệu PostgreSQL bằng named volume. |
+
+### Luồng xử lý request
+
+![Request Processing Flow](docs/images/request-processing-flow.png)
+
+*Hình 2 — Luồng tổng quát từ HTTP request đến phản hồi. Sơ đồ thể hiện đường đi điển hình; endpoint công khai và endpoint cần xác thực có nhánh xử lý khác nhau.*
+
+1. **Client / Frontend** gửi HTTP request đến FastAPI router.
+2. **Pydantic** kiểm tra dữ liệu đầu vào phù hợp với schema của endpoint.
+3. Với **endpoint được bảo vệ**, dependency `get_current_user` xác thực JWT và trạng thái tài khoản; sau đó backend kiểm tra vai trò hoặc quyền truy cập ticket. Đăng nhập, health check và tài liệu API có luồng riêng.
+4. Endpoint gọi **Ticket Service** khi cần quy tắc nghiệp vụ; những trường hợp khác có thể truy vấn **SQLAlchemy** trực tiếp.
+5. SQLAlchemy đọc/ghi **PostgreSQL**, sau đó FastAPI trả response. Request không hợp lệ hoặc không đủ quyền sẽ nhận mã lỗi HTTP tương ứng.
+
+> Lưu ý: sơ đồ minh họa luồng logic, không khẳng định tất cả endpoint đều lần lượt đi qua Ticket Service hoặc database. Tài liệu mô tả chi tiết hơn tại [docs/architecture.md](docs/architecture.md).
+
+## 4. Cấu trúc thư mục
+
 ```text
 .
-├── app/
+├── app/                         # Mã nguồn backend FastAPI
 │   ├── api/
-│   │   ├── deps.py
+│   │   ├── deps.py              # Dependency xác thực người dùng hiện tại
 │   │   └── v1/
-│   │       ├── auth.py
-│   │       ├── dashboard.py
-│   │       ├── tickets.py
-│   │       └── users.py
-│   ├── core/                 # Cấu hình và bảo mật
-│   ├── db/                   # Database base và session
-│   ├── models/               # SQLAlchemy models
-│   ├── schemas/              # Pydantic request/response schemas
+│   │       ├── auth.py          # API đăng nhập, thông tin tài khoản
+│   │       ├── dashboard.py     # API thống kê ticket
+│   │       ├── tickets.py       # API ticket, phân công, bình luận, sự kiện
+│   │       └── users.py         # API quản lý người dùng
+│   ├── core/                    # Cấu hình ứng dụng, JWT, băm mật khẩu
+│   ├── db/                      # SQLAlchemy Base, engine và session
+│   ├── models/                  # ORM models cho bốn bảng nghiệp vụ
+│   ├── schemas/                 # Pydantic request/response schemas
 │   ├── services/
-│   │   └── ticket_service.py # Quy tắc nghiệp vụ ticket
-│   └── main.py
+│   │   └── ticket_service.py    # Quy tắc nghiệp vụ và lịch sử ticket
+│   └── main.py                  # Khởi tạo FastAPI, router và frontend
 ├── docs/
-│   ├── images/
-│   ├── architecture.md
-│   ├── erd.md
-│   └── requirements.md
-├── frontend/
+│   ├── images/                  # Sơ đồ và ảnh minh chứng
+│   ├── architecture.md          # Mô tả kiến trúc
+│   ├── erd.md                   # Thiết kế CSDL, quan hệ, ràng buộc
+│   └── requirements.md          # Yêu cầu nghiệp vụ
+├── frontend/                    # Giao diện demo: HTML, CSS, JS
 ├── migrations/
-│   └── versions/
-├── scripts/
-├── tests/
-├── .env.example
-├── alembic.ini
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── README.md
+│   └── versions/                # Các phiên bản migration Alembic
+├── scripts/                     # Script tạo tài khoản demo
+├── tests/                       # Fixture và test API
+├── .env.example                 # Mẫu biến môi trường
+├── alembic.ini                  # Cấu hình Alembic
+├── Dockerfile                   # Image FastAPI
+├── docker-compose.yml           # Dịch vụ API và PostgreSQL
+├── requirements.txt             # Thư viện Python
+└── README.md                    # Hướng dẫn sử dụng dự án
 ```
 
-Tầng nghiệp vụ ticket hiện được tập trung chủ yếu trong app/services/ticket_service.py; truy vấn dữ liệu khác được thực hiện từ các router bằng SQLAlchemy. Dự án **không có package Repository riêng**.
+## 5. Cơ sở dữ liệu và vòng đời ticket
 
-Tài liệu chi tiết:
-- [Kiến trúc hệ thống](docs/architecture.md)
-- [Thiết kế cơ sở dữ liệu (ERD)](docs/erd.md)
-- [Yêu cầu nghiệp vụ](docs/requirements.md)
+### ERD
 
-## 5. Mô hình dữ liệu
+![Database ERD](docs/images/erd.png)
 
-Cơ sở dữ liệu nghiệp vụ gồm bốn bảng chính:
+*Hình 3 — Bốn bảng nghiệp vụ cùng các quan hệ khóa ngoại.*
 
-- **users:** tài khoản, vai trò và trạng thái hoạt động.
-- **tickets:** yêu cầu hỗ trợ, người tạo, người phụ trách, trạng thái và mức ưu tiên.
-- **comments:** nội dung trao đổi trên ticket.
-- **ticket_events:** lịch sử sự kiện và giá trị trước/sau thay đổi.
+| Bảng | Ý nghĩa |
+|---|---|
+| `users` | Danh tính, email, mật khẩu đã băm, vai trò và trạng thái tài khoản |
+| `tickets` | Thông tin yêu cầu, mức ưu tiên, trạng thái, người tạo và người được giao |
+| `comments` | Nội dung bình luận; tham chiếu ticket và người viết |
+| `ticket_events` | Audit trail: người thao tác, loại sự kiện, giá trị trước/sau |
 
-![Entity Relationship Diagram](docs/images/erd.png)
+**Sáu khóa ngoại:** `tickets.requester_id`, `tickets.assignee_id`, `comments.author_id`, `comments.ticket_id`, `ticket_events.actor_id` và `ticket_events.ticket_id`. Hai cột `requester_id` và `assignee_id` cùng tham chiếu `users.id` nhưng khác ý nghĩa; `assignee_id` có thể để trống khi ticket chưa được giao.
 
-Các trạng thái ticket được sử dụng là OPEN, IN_PROGRESS, RESOLVED và CLOSED. Mức ưu tiên gồm LOW, MEDIUM, HIGH và URGENT. Chi tiết cột, khóa ngoại và ràng buộc được trình bày trong [docs/erd.md](docs/erd.md).
+Chi tiết kiểu cột, ràng buộc và chỉ mục: [docs/erd.md](docs/erd.md).
 
-## 6. Chạy dự án bằng Docker Compose
+### Ticket workflow
 
-### Yêu cầu
+```text
+OPEN  ──>  IN_PROGRESS  ──>  RESOLVED  ──>  CLOSED
+                 ^                  │
+                 └──────────────────┘
+```
 
-- Git
-- Docker Desktop có Docker Compose
+- Ticket mới được tạo với trạng thái `OPEN`.
+- Khi Admin phân công ticket đang `OPEN`, hệ thống chuyển sang `IN_PROGRESS`.
+- Support Agent được giao có thể chuyển `IN_PROGRESS → RESOLVED`; ticket `RESOLVED` có thể được mở lại về `IN_PROGRESS` hoặc đóng thành `CLOSED`.
+- `CLOSED` không có chuyển trạng thái tiếp theo trong logic hiện tại.
+- Các thao tác tạo, phân công, đổi trạng thái và bình luận ghi sự kiện tương ứng: `TICKET_CREATED`, `TICKET_ASSIGNED`, `STATUS_CHANGED`, `COMMENT_ADDED`.
 
-### Bước 1: Tải mã nguồn
+## 6. Hướng dẫn chạy dự án
+
+Hướng dẫn dành cho **Windows PowerShell**. Có thể dùng terminal của VS Code tại thư mục gốc repository.
+
+### 6.1. Yêu cầu môi trường
+
+- Git để tải repository.
+- Docker Desktop đang chạy (chế độ Linux containers), có Docker Compose.
+- Python 3.11 để chạy **Alembic và seed từ máy host** (vì service `api` trong Dockerfile hiện chưa copy thư mục `scripts/`).
+
+Kiểm tra nhanh:
+
+```powershell
+git --version
+docker --version
+docker compose version
+python --version
+```
+
+### 6.2. Clone repository
 
 ```powershell
 git clone https://github.com/VuHuuThinh05/service-desk-issue-tracking.git
 cd service-desk-issue-tracking
 ```
 
-### Bước 2: Tạo file cấu hình
+### 6.3. Tạo cấu hình môi trường
 
 ```powershell
 Copy-Item .env.example .env
+notepad .env
 ```
 
-Mở .env và thay các giá trị mẫu, đặc biệt là POSTGRES_PASSWORD và JWT_SECRET_KEY. Không commit file .env hoặc secret thực tế lên GitHub.
+Các biến quan trọng trong file mẫu:
 
-### Bước 3: Khởi động dịch vụ
+| Biến | Vai trò | Giá trị mẫu |
+|---|---|---|
+| `POSTGRES_DB` | Tên database | `service_desk` |
+| `POSTGRES_USER` | Tài khoản PostgreSQL | `service_desk_user` |
+| `POSTGRES_PASSWORD` | Mật khẩu PostgreSQL | Thay giá trị mẫu |
+| `POSTGRES_HOST_PORT` | Cổng PostgreSQL mở trên máy host | `5433` |
+| `DB_HOST` | Host để lệnh Python chạy **trên máy** kết nối DB | `localhost` |
+| `DB_PORT` | Cổng cho lệnh Python chạy **trên máy** | `5433` |
+| `JWT_SECRET_KEY` | Khóa ký JWT | Thay bằng chuỗi bí mật đủ mạnh |
+| `JWT_ALGORITHM` | Thuật toán JWT | `HS256` |
+| `JWT_EXPIRE_MINUTES` | Thời hạn access token (phút) | `30` |
+
+**Quan trọng:** không commit `.env` lên GitHub. Khi chạy trong container, Docker Compose tự đặt `DB_HOST=db`, `DB_PORT=5432`; trong PowerShell host, giữ `localhost:5433` theo file mẫu. Nếu đổi `POSTGRES_HOST_PORT`, cập nhật `DB_PORT` tương ứng cho lệnh chạy ở host.
+
+### 6.4. Khởi động PostgreSQL và API
 
 ```powershell
 docker compose up --build -d
 docker compose ps
 ```
 
-Docker Compose định nghĩa hai dịch vụ:
-- **db:** PostgreSQL 16, dữ liệu lưu trong Docker volume.
-- **api:** FastAPI, công bố cổng 8000.
+Theo `docker-compose.yml`, hai service được tạo:
 
-Cấu hình Compose truyền thông tin kết nối database cho API qua hostname nội bộ db và cổng 5432. Cổng PostgreSQL trên máy host được đặt bằng POSTGRES_HOST_PORT trong file .env.
+- **`db`** (`service-desk-db`): PostgreSQL 16, healthcheck và volume `service_desk_data`.
+- **`api`** (`service-desk-api`): Uvicorn/FastAPI tại cổng `8000`; khởi động sau khi database healthy.
 
-Xem log khi cần:
-
-```powershell
-docker compose logs --tail 100
-```
-
-### Bước 4: Khởi tạo schema
-
-Migration được quản lý bằng Alembic. Khi chạy lệnh migration từ máy host, cần có môi trường Python đã cài dependencies và file .env được cấu hình để kết nối đúng database:
+Kiểm tra log:
 
 ```powershell
-python -m pip install -r requirements.txt
-alembic upgrade head
+docker compose logs --tail 100 db
+docker compose logs --tail 100 api
 ```
 
-Không chạy migration từ môi trường host nếu cấu hình kết nối chưa trỏ đúng tới database đang sử dụng. Hãy kiểm tra log và trạng thái schema trước khi chạy migration để tránh thao tác nhầm database.
+> API có thể khởi động thành công trong khi các bảng nghiệp vụ chưa tồn tại. **Cần thực hiện bước migration tiếp theo** trước khi đăng nhập và thao tác dữ liệu.
 
-## 7. Địa chỉ truy cập
+### 6.5. Tạo môi trường Python và chạy migration
 
-Với cấu hình cổng mặc định trong dự án:
+Trong **PowerShell tại thư mục gốc**:
 
-| Thành phần | Địa chỉ |
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m alembic upgrade head
+```
+
+Alembic đọc cấu hình từ `.env` của máy host qua `app/core/config.py`, sử dụng `DB_HOST=localhost` và `DB_PORT=5433` (hoặc cổng host bạn thiết lập).
+
+Kiểm tra phiên bản migration:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic current
+```
+
+Chạy migration chỉ với database phát triển đã được xác nhận đúng. Không chạy `docker compose down -v` nếu muốn giữ dữ liệu PostgreSQL.
+
+### 6.6. Tạo tài khoản demo
+
+Sau khi migration thành công, chạy script seed từ **máy host**:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.seed_users
+```
+
+Script yêu cầu nhập và xác nhận **mật khẩu demo dùng chung** (ít nhất 12 ký tự). Mật khẩu không hiển thị khi nhập và không được in ra terminal. Các tài khoản sau được tạo nếu chưa tồn tại:
+
+| Email demo | Role |
 |---|---|
-| Giao diện demo | http://localhost:8000/ |
-| Swagger UI | http://localhost:8000/docs |
-| ReDoc | http://localhost:8000/redoc |
-| Health check | http://localhost:8000/health |
+| `admin@servicedesk.local` | ADMIN |
+| `agent1@servicedesk.local` | SUPPORT_AGENT |
+| `agent2@servicedesk.local` | SUPPORT_AGENT |
+| `employee1@servicedesk.local` | EMPLOYEE |
+| `employee2@servicedesk.local` | EMPLOYEE |
+| `employee3@servicedesk.local` | EMPLOYEE |
 
-![Swagger UI](docs/images/api-docs.png)
+Script bỏ qua email đã tồn tại. Các email `.local` chỉ phục vụ demo và không phải hộp thư thực.
+
+### 6.7. Truy cập và kiểm tra
+
+| Địa chỉ | Mục đích |
+|---|---|
+| http://localhost:8000/ | Giao diện demo |
+| http://localhost:8000/docs | Swagger UI, thử API |
+| http://localhost:8000/redoc | Tài liệu ReDoc |
+| http://localhost:8000/health | Health check |
+
+Kiểm tra health từ PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:8000/health
+```
+
+Kết quả kỳ vọng: `{"status":"ok"}`. Đây chỉ là kiểm tra ứng dụng phản hồi, **không** thay thế thử thao tác database.
+
+**Quy trình demo đề xuất:** đăng nhập với Admin → tạo/xem tài khoản → đăng nhập Employee và tạo ticket → đăng nhập Admin phân công Support Agent → đăng nhập Agent chuyển trạng thái/thêm bình luận → xem lịch sử sự kiện và dashboard.
+
+### 6.8. Dừng, chạy lại và xử lý lỗi cơ bản
+
+```powershell
+docker compose stop              # Dừng tạm, giữ container
+docker compose start             # Khởi động lại
+docker compose down              # Xóa container/network, giữ named volume
+docker compose up --build -d     # Khởi động lại và build API
+```
+
+| Tình huống | Kiểm tra |
+|---|---|
+| Docker không khởi động | Mở Docker Desktop; chạy `docker compose ps`. |
+| Cổng `8000` hoặc `5433` đang được sử dụng | Kiểm tra ứng dụng đang chiếm cổng; đổi cổng host PostgreSQL trong `.env` nếu cần. |
+| API trả lỗi thiếu bảng | Chạy `alembic upgrade head` ở bước 6.5. |
+| Host không kết nối PostgreSQL | Kiểm tra `DB_HOST=localhost`, `DB_PORT=POSTGRES_HOST_PORT` và `docker compose logs db`. |
+| Đăng nhập thất bại | Xác nhận đã seed, dùng đúng email/mật khẩu và tài khoản còn hoạt động. |
+| Token không hợp lệ | Kiểm tra `JWT_SECRET_KEY` và đăng nhập lại để lấy token mới. |
+
+## 7. API và hướng dẫn sử dụng
+
+Các endpoint nghiệp vụ sử dụng prefix **`/api/v1`**. Endpoint cần xác thực nhận JWT dưới dạng `Authorization: Bearer <access_token>`.
+
+| Method | Endpoint | Chức năng |
+|---|---|---|
+| POST | `/api/v1/auth/login` | Đăng nhập, trả access token |
+| GET | `/api/v1/auth/me` | Thông tin tài khoản từ token |
+| GET | `/api/v1/users` | Danh sách tài khoản (Admin) |
+| POST | `/api/v1/users` | Tạo tài khoản (Admin) |
+| PATCH | `/api/v1/users/{user_id}/status` | Kích hoạt/vô hiệu hóa tài khoản (Admin) |
+| POST | `/api/v1/tickets` | Tạo ticket |
+| GET | `/api/v1/tickets` | Danh sách ticket theo quyền |
+| GET | `/api/v1/tickets/{ticket_id}` | Chi tiết ticket |
+| POST | `/api/v1/tickets/{ticket_id}/assign` | Phân công ticket (Admin) |
+| POST | `/api/v1/tickets/{ticket_id}/transitions` | Chuyển trạng thái (Agent được giao) |
+| GET | `/api/v1/tickets/{ticket_id}/comments` | Danh sách bình luận |
+| POST | `/api/v1/tickets/{ticket_id}/comments` | Thêm bình luận |
+| GET | `/api/v1/tickets/{ticket_id}/events` | Xem audit trail |
+| GET | `/api/v1/dashboard/summary` | Thống kê tổng hợp |
+
+**Ví dụ lọc ticket:** `GET /api/v1/tickets?status=OPEN&limit=20&offset=0`. Danh sách hiện **chưa có** query filter riêng theo `priority` hoặc `assignee_id`.
+
+Để xem request body, schema response và status code chính xác của từng endpoint, mở [Swagger UI](http://localhost:8000/docs) khi API đang chạy.
+
+## 8. Kiểm thử
+
+Dự án có test cho xác thực, phân quyền, quản lý người dùng và thao tác ticket. Fixture trong `tests/conftest.py` sử dụng **SQLite in-memory riêng cho từng test**, đồng thời override dependency `get_db` của FastAPI.
+
+Chạy từ thư mục gốc:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -v
+```
+
+Hoặc kiểm tra riêng nhóm test:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/test_auth.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_users.py -v
+.\.venv\Scripts\python.exe -m pytest tests/test_tickets.py -v
+```
+
+**Phạm vi xác nhận:** đây là các test backend dùng SQLite; chưa nên mô tả kết quả này như một lần kiểm thử tích hợp PostgreSQL. Số test pass cụ thể phụ thuộc kết quả chạy thực tế; xem ảnh minh chứng bên dưới.
+
+## 9. Hình ảnh minh chứng
+
+Các ảnh được lưu trong `docs/images/` nhằm giúp người xem repository nhanh chóng hình dung kết quả chạy hệ thống.
+
+### 9.1. Ticket Interface
 
 ![Ticket Management Interface](docs/images/ticket-interface.png)
 
-Health check trả về trạng thái ứng dụng. Điều này không thay thế việc kiểm tra riêng kết nối database và các thao tác nghiệp vụ.
+*Hình 4 — Giao diện demo: minh họa cách người dùng tương tác với các chức năng ticket thông qua frontend HTML/CSS/JavaScript. Quyền thực hiện thao tác vẫn được kiểm tra ở backend.*
 
-## 8. API chính
+### 9.2. API Documentation — Swagger UI
 
-Các endpoint được đăng ký dưới tiền tố /api/v1.
+![Swagger UI / API Docs](docs/images/api-docs.png)
 
-| Nhóm | Endpoint | Mục đích |
-|---|---|---|
-| Auth | POST /api/v1/auth/login | Đăng nhập, nhận access token |
-| Auth | GET /api/v1/auth/me | Lấy thông tin người dùng hiện tại |
-| Users | GET /api/v1/users | Liệt kê người dùng (Admin) |
-| Users | POST /api/v1/users | Tạo người dùng (Admin) |
-| Users | PATCH /api/v1/users/{user_id}/status | Bật/tắt tài khoản (Admin) |
-| Tickets | POST /api/v1/tickets | Tạo ticket |
-| Tickets | GET /api/v1/tickets | Liệt kê ticket theo quyền; hỗ trợ status, limit, offset |
-| Tickets | GET /api/v1/tickets/{ticket_id} | Xem chi tiết ticket |
-| Tickets | POST /api/v1/tickets/{ticket_id}/assign | Phân công ticket |
-| Tickets | POST /api/v1/tickets/{ticket_id}/transitions | Chuyển trạng thái |
-| Comments | GET /api/v1/tickets/{ticket_id}/comments | Xem bình luận |
-| Comments | POST /api/v1/tickets/{ticket_id}/comments | Thêm bình luận |
-| Events | GET /api/v1/tickets/{ticket_id}/events | Xem lịch sử sự kiện |
-| Dashboard | GET /api/v1/dashboard/summary | Lấy thống kê tổng hợp |
+*Hình 5 — Swagger UI được FastAPI sinh từ OpenAPI schema, thể hiện nhóm endpoint, phương thức HTTP và cho phép thử request/response khi backend đang chạy.*
 
-Swagger UI tại /docs là nguồn tham khảo trực tiếp để xem schema request/response hiện hành.
+### 9.3. Docker Services
 
-## 9. Kiểm thử
+![Docker Compose Services](docs/images/docker-services.png)
 
-Chạy bộ kiểm thử từ thư mục gốc khi đã cài dependencies:
+*Hình 6 — Trạng thái các container FastAPI và PostgreSQL khi triển khai bằng Docker Compose. PostgreSQL sử dụng named volume để lưu dữ liệu.*
 
-```powershell
-python -m pytest -v
-```
+### 9.4. Test Results
 
-Bộ test hiện có tập trung vào xác thực, người dùng và ticket. Cần đọc fixture trong tests/conftest.py để xác định loại database được sử dụng khi test; kết quả test dùng SQLite không đồng nghĩa với việc đã kiểm thử tích hợp trên PostgreSQL.
+![Automated Test Results](docs/images/test-results.png)
 
-![Test Results](docs/images/test-results.png)
+*Hình 7 — Kết quả chạy pytest. Khi cập nhật code hoặc test, cần chụp lại kết quả tương ứng; ảnh chỉ phản ánh lần chạy tại thời điểm chụp.*
 
-Kết quả và số lượng test trong ảnh cần được cập nhật từ lần chạy thực tế gần nhất, không nên dùng ảnh cũ nếu kết quả đã thay đổi.
+Ba sơ đồ **System Architecture**, **Request Processing Flow** và **ERD** được đặt tại các mục 3 và 5 để giải thích thiết kế cùng nội dung liên quan, thay vì lặp lại ở phần ảnh minh chứng.
 
-## 10. Hình ảnh minh chứng khác
+## 10. Giới hạn và hướng phát triển
 
-### Luồng xử lý request
+Dự án hiện ưu tiên các nghiệp vụ backend cốt lõi. Một số hướng mở rộng **chưa triển khai**:
 
-![Request Processing Flow](docs/images/request-processing-flow.png)
+- Bộ lọc ticket nâng cao theo priority, assignee và khoảng thời gian.
+- SLA, deadline, cảnh báo quá hạn và notification.
+- Dashboard với thời gian xử lý trung bình hoặc KPI nâng cao.
+- Integration tests trên PostgreSQL và CI tự động chạy test.
+- Quản lý secrets, logging, triển khai production và nâng cấp UI.
 
-### Dịch vụ Docker
+### Tài liệu bổ sung
 
-![Docker Services](docs/images/docker-services.png)
+- [Architecture](docs/architecture.md)
+- [Database Design / ERD](docs/erd.md)
+- [Business Requirements](docs/requirements.md)
 
-## 11. Giới hạn hiện tại và hướng phát triển
+---
 
-Các hướng mở rộng có thể cân nhắc trong tương lai:
-
-- Bổ sung bộ lọc ticket theo mức ưu tiên và người phụ trách nếu cần.
-- Bổ sung SLA, thời hạn xử lý và cảnh báo ticket quá hạn.
-- Mở rộng dashboard và các chỉ số thời gian xử lý.
-- Bổ sung kiểm thử tích hợp trực tiếp với PostgreSQL.
-- Thiết lập CI để tự động chạy test khi có thay đổi.
-- Hoàn thiện cấu hình production, logging và quản lý secret.
-
-Đây là các hướng phát triển đề xuất, không phải cam kết rằng những chức năng đó đã có trong phiên bản hiện tại.
+*Dự án được xây dựng với mục tiêu thực hành backend engineering: API design, authentication & authorization, business rules, relational data modeling, migrations, testing và containerized deployment.*
