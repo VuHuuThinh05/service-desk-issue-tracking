@@ -1,386 +1,233 @@
-# Service Desk Issue Tracking
+# Service Desk & Issue Tracking
 
-## 1. Giới thiệu dự án
+Hệ thống quản lý yêu cầu hỗ trợ nội bộ (ticket), được xây dựng bằng FastAPI, SQLAlchemy và PostgreSQL. Dự án minh họa quy trình tiếp nhận ticket, phân quyền người dùng, phân công nhân viên hỗ trợ, cập nhật trạng thái, trao đổi bình luận và lưu lịch sử xử lý.
 
-### 1.1. Tổng quan
+## 1. Chức năng hiện có
 
-**Service Desk Issue Tracking** là hệ thống quản lý yêu cầu hỗ trợ kỹ thuật, được xây dựng nhằm hỗ trợ doanh nghiệp tiếp nhận, theo dõi và xử lý các sự cố hoặc yêu cầu từ nhân viên.
+- **Xác thực:** đăng nhập bằng email/mật khẩu, cấp JWT access token và lấy thông tin tài khoản hiện tại.
+- **Quản lý người dùng:** Admin xem danh sách, tạo tài khoản và bật/tắt trạng thái hoạt động.
+- **Quản lý ticket:** tạo ticket, xem danh sách và chi tiết theo quyền truy cập.
+- **Lọc và phân trang:** danh sách ticket hỗ trợ lọc theo trạng thái (status), cùng tham số limit và offset.
+- **Phân công:** Admin giao ticket cho Support Agent đang hoạt động.
+- **Quy trình trạng thái:** Support Agent được giao ticket có thể chuyển trạng thái theo các quy tắc được triển khai.
+- **Bình luận và lịch sử:** xem/thêm bình luận, xem các sự kiện của ticket; không cho thêm bình luận khi ticket đã đóng.
+- **Dashboard:** thống kê ticket theo trạng thái và một số mức ưu tiên, với phạm vi dữ liệu phụ thuộc vai trò.
+- **Giao diện demo:** frontend HTML, CSS và JavaScript được phục vụ bởi ứng dụng FastAPI.
 
-Trong môi trường doanh nghiệp, các yêu cầu hỗ trợ như lỗi phần mềm, sự cố thiết bị hoặc vấn đề về tài khoản cần được ghi nhận và quản lý tập trung. Nếu xử lý thông qua các kênh trao đổi riêng lẻ, việc theo dõi tiến độ, phân công trách nhiệm và tra cứu lịch sử có thể gặp nhiều khó khăn.
+> Lưu ý về phạm vi: API danh sách ticket hiện hỗ trợ lọc theo trạng thái, không có bộ lọc query riêng theo priority hoặc assignee. Tài liệu này mô tả hành vi đang có, không xem các chức năng dự kiến là chức năng đã hoàn thành.
 
-Dự án giải quyết vấn đề này bằng cách xây dựng một hệ thống quản lý ticket, cho phép người dùng tạo yêu cầu, nhân viên hỗ trợ tiếp nhận và xử lý, đồng thời lưu lại lịch sử thay đổi để phục vụ việc theo dõi và kiểm tra.
+## 2. Vai trò người dùng
 
-### 1.2. Mục tiêu
-
-- Xây dựng API phục vụ việc tạo, truy vấn và quản lý ticket.
-- Quản lý người dùng và phân quyền theo vai trò.
-- Hỗ trợ phân công nhân viên phụ trách và cập nhật trạng thái xử lý.
-- Lưu trữ bình luận và lịch sử thay đổi của ticket.
-- Áp dụng PostgreSQL để quản lý dữ liệu có cấu trúc.
-- Sử dụng Docker Compose để triển khai môi trường chạy ứng dụng.
-- Xây dựng bộ kiểm thử nhằm kiểm tra tính đúng đắn của các chức năng và quy tắc nghiệp vụ.
-
-### 1.3. Các chức năng chính
-
-| Nhóm chức năng | Mô tả |
+| Vai trò | Quyền chính theo triển khai hiện tại |
 |---|---|
-| Xác thực | Đăng nhập và xác định người dùng hiện tại bằng JWT |
-| Quản lý người dùng | Quản lý thông tin và vai trò người dùng |
-| Quản lý ticket | Tạo, xem, lọc và theo dõi yêu cầu hỗ trợ |
-| Phân công | Gán ticket cho nhân viên hỗ trợ |
-| Quản lý trạng thái | Theo dõi quá trình xử lý ticket |
-| Bình luận | Trao đổi thông tin trong từng ticket |
-| Lịch sử hoạt động | Ghi nhận các thay đổi quan trọng để phục vụ kiểm tra |
-| Thống kê | Tổng hợp thông tin phục vụ theo dõi tình hình xử lý yêu cầu |
+| EMPLOYEE | Tạo ticket và truy cập ticket do mình tạo. |
+| SUPPORT_AGENT | Truy cập ticket được giao cho mình, chuyển trạng thái và trao đổi trong ticket có quyền truy cập. |
+| ADMIN | Quản lý người dùng, xem toàn bộ ticket và phân công ticket cho Support Agent. |
 
-### 1.4. Đối tượng sử dụng
+Các kiểm tra quyền được thực hiện ở backend. Việc giao ticket cho Support Agent đang hoạt động được giới hạn cho Admin.
 
-Hệ thống được thiết kế với ba vai trò chính:
-
-- **EMPLOYEE:** tạo yêu cầu hỗ trợ và theo dõi các ticket của mình.
-- **SUPPORT_AGENT:** tiếp nhận, xử lý và cập nhật các ticket được phân công.
-- **ADMIN:** quản lý hệ thống và thực hiện các thao tác quản trị theo quyền được cấp.
-
-Các quyền truy cập cụ thể được kiểm soát ở phía backend nhằm hạn chế việc người dùng thực hiện những thao tác không được phép.
-
-## 2. Kiến trúc hệ thống và công nghệ sử dụng
-
-### 2.1. Kiến trúc hệ thống
-
-Dự án sử dụng kiến trúc **Modular Monolith**. Các module backend được tổ chức theo trách nhiệm riêng nhưng cùng chạy trong một ứng dụng FastAPI.
-
-Kiến trúc này phù hợp với quy mô dự án vì dễ phát triển, kiểm thử, bảo trì và triển khai trên môi trường cục bộ.
-
-![System Architecture](docs/images/system-architecture.png)
-
-
-Trong đó:
-
-- **API Layer:** tiếp nhận HTTP request, kiểm tra dữ liệu đầu vào và trả về HTTP response.
-- **Authentication & Authorization:** xác thực người dùng và kiểm tra quyền thực hiện thao tác.
-- **Service Layer:** xử lý quy tắc nghiệp vụ như phân công ticket, chuyển trạng thái và ghi nhận lịch sử.
-- **Repository / Data Access Layer:** thực hiện truy vấn và thao tác dữ liệu thông qua SQLAlchemy.
-- **Database Layer:** lưu trữ thông tin người dùng, ticket, bình luận và lịch sử hoạt động.
-
-Việc tách các tầng giúp hạn chế đặt toàn bộ logic nghiệp vụ trực tiếp trong các API endpoint, đồng thời thuận tiện hơn khi kiểm thử từng thành phần.
-
-
-
-### 2.2. Công nghệ sử dụng
+## 3. Công nghệ sử dụng
 
 | Công nghệ | Vai trò |
 |---|---|
-| Python 3.11 | Ngôn ngữ lập trình backend |
-| FastAPI | Xây dựng REST API |
-| Pydantic | Kiểm tra và chuẩn hóa dữ liệu request/response |
-| SQLAlchemy | ORM và thao tác với cơ sở dữ liệu |
-| PostgreSQL 16 | Hệ quản trị cơ sở dữ liệu quan hệ |
-| Alembic | Quản lý phiên bản và migration cơ sở dữ liệu |
-| JWT | Xác thực thông qua access token |
-| Argon2 | Băm mật khẩu trước khi lưu trữ |
-| pytest | Xây dựng và chạy kiểm thử tự động |
-| HTTPX / FastAPI TestClient | Kiểm thử API |
-| Docker | Đóng gói các thành phần chạy ứng dụng |
-| Docker Compose | Khởi động và quản lý các dịch vụ |
-| HTML, CSS, JavaScript | Xây dựng giao diện demo |
-| OpenAPI / Swagger UI | Mô tả và tương tác với API |
+| Python 3.11 | Ngôn ngữ backend |
+| FastAPI | REST API và OpenAPI documentation |
+| Pydantic / pydantic-settings | Kiểm tra dữ liệu và đọc cấu hình |
+| SQLAlchemy | ORM và truy vấn dữ liệu |
+| PostgreSQL 16 | Cơ sở dữ liệu |
+| Alembic | Quản lý migration |
+| JWT (PyJWT) | Access token |
+| Argon2 (pwdlib) | Băm và xác minh mật khẩu |
+| pytest, HTTPX, TestClient | Kiểm thử |
+| Docker, Docker Compose | Đóng gói và chạy dịch vụ |
+| HTML, CSS, JavaScript | Giao diện demo |
 
-### 2.3. Các nguyên tắc thiết kế
+## 4. Kiến trúc và cấu trúc thư mục
 
-Dự án áp dụng một số nguyên tắc cơ bản:
+Dự án sử dụng kiểu **modular monolith**: backend chạy trong một ứng dụng FastAPI, được tổ chức theo các module chức năng.
 
-- Phân chia module theo chức năng và trách nhiệm.
-- Tách database model khỏi schema dùng cho API.
-- Kiểm tra quyền truy cập tại backend thay vì chỉ dựa vào giao diện.
-- Không lưu mật khẩu dạng văn bản thuần.
-- Sử dụng biến môi trường cho cấu hình nhạy cảm.
-- Dùng transaction khi một thao tác nghiệp vụ cần cập nhật nhiều bản ghi liên quan.
-- Sử dụng migration để quản lý thay đổi cấu trúc cơ sở dữ liệu.
-
-## 3. Cấu trúc thư mục dự án
-
-Cấu trúc thư mục được tổ chức để tách biệt mã nguồn, cấu hình, tài liệu và kiểm thử.
+![System Architecture](docs/images/system-architecture.png)
 
 ```text
-Service-Desk-Issue-Tracking/
-├── app/                                    # Thư mục nguồn chính của ứng dụng Backend (FastAPI)
-│   ├── api/                                # Các điểm truy cập API
-│   │   ├── deps.py                         # Phụ thuộc chung (Dependencies: xác thực token, kết nối DB)
-│   │   └── v1/                             # Chứa các tệp Router định nghĩa API phiên bản 1
-│   ├── core/                               # Cấu hình lõi (biến môi trường, cài đặt bảo mật JWT, hash mật khẩu)
-│   ├── db/                                 # Cấu hình kết nối và cơ sở dữ liệu SQLAlchemy
-│   ├── models/                             # Định nghĩa các bản mẫu ORM Models (bảng CSDL)
-│   ├── schemas/                            # Pydantic Schemas (Validate dữ liệu vào/ra cho API)
-│   │   ├── auth.py                         # Schema cho thông tin xác thực/token
-│   │   ├── dashboard.py                    # Schema cho dữ liệu bảng điều khiển
-│   │   ├── ticket.py                       # Schema cho yêu cầu/sự cố (ticket)
-│   │   └── user.py                         # Schema cho thông tin người dùng
-│   ├── services/                           # Tầng xử lý logic nghiệp vụ (Business Logic)
-│   │   └── ticket_service.py               # Logic nghiệp vụ xử lý các thao tác trên ticket
-│   └── main.py                             # Tệp chính khởi chạy ứng dụng FastAPI
-├── docs/                                   # Tài liệu dự án và hình ảnh
-│   ├── images/                             # Lưu trữ hình ảnh minh họa hệ thống, ERD, giao diện
-│   ├── architecture.md                     # Tài liệu thiết kế kiến trúc hệ thống
-│   ├── erd.md                              # Tài liệu mô hình sơ đồ quan hệ CSDL
-│   └── requirements.md                     # Tài liệu phân tích yêu cầu bài toán
-├── frontend/                               # Giao diện web phía client (Single Page Application)
-├── migrations/                             # Thư mục quản lý các phiên bản dịch chuyển CSDL (Alembic)
-│   ├── versions/                           # Các tệp script cập nhật cấu trúc bảng CSDL
-│   ├── env.py                              # Môi trường chạy migration
-│   ├── README                              # Tài liệu hướng dẫn sử dụng migration
-│   └── script.py.mako                      # Template tạo script migration mới
-├── scripts/                                # Các kịch bản phụ trợ
-├── tests/                                  # Bộ kiểm thử tự động (Automated Tests với Pytest)
-│   ├── conftest.py                         # Thiết lập các fixture mẫu cho việc kiểm thử
-│   ├── test_auth.py                        # Kiểm thử chức năng xác thực
-│   ├── test_tickets.py                     # Kiểm thử quy trình quản lý ticket
-│   └── test_users.py                       # Kiểm thử chức năng quản lý người dùng
-├── docker-compose.yml                      # Tệp cấu hình khởi chạy các dịch vụ bằng Docker Compose
-├── Dockerfile                              # Tệp chỉ dẫn đóng gói ứng dụng Backend thành Docker Container
-└── README.md                               # Trang tài liệu tổng quan giới thiệu dự án trên GitHub
+.
+├── app/
+│   ├── api/
+│   │   ├── deps.py
+│   │   └── v1/
+│   │       ├── auth.py
+│   │       ├── dashboard.py
+│   │       ├── tickets.py
+│   │       └── users.py
+│   ├── core/                 # Cấu hình và bảo mật
+│   ├── db/                   # Database base và session
+│   ├── models/               # SQLAlchemy models
+│   ├── schemas/              # Pydantic request/response schemas
+│   ├── services/
+│   │   └── ticket_service.py # Quy tắc nghiệp vụ ticket
+│   └── main.py
+├── docs/
+│   ├── images/
+│   ├── architecture.md
+│   ├── erd.md
+│   └── requirements.md
+├── frontend/
+├── migrations/
+│   └── versions/
+├── scripts/
+├── tests/
+├── .env.example
+├── alembic.ini
+├── Dockerfile
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
 ```
 
-## 4. Thiết kế cơ sở dữ liệu
+Tầng nghiệp vụ ticket hiện được tập trung chủ yếu trong app/services/ticket_service.py; truy vấn dữ liệu khác được thực hiện từ các router bằng SQLAlchemy. Dự án **không có package Repository riêng**.
 
-### 4.1. Tổng quan
+Tài liệu chi tiết:
+- [Kiến trúc hệ thống](docs/architecture.md)
+- [Thiết kế cơ sở dữ liệu (ERD)](docs/erd.md)
+- [Yêu cầu nghiệp vụ](docs/requirements.md)
 
-Cơ sở dữ liệu sử dụng PostgreSQL và gồm bốn bảng nghiệp vụ cốt lõi:
+## 5. Mô hình dữ liệu
 
-- `users`: lưu thông tin người dùng.
-- `tickets`: lưu các yêu cầu hỗ trợ.
-- `comments`: lưu nội dung trao đổi trong ticket.
-- `ticket_events`: lưu lịch sử các sự kiện và thay đổi quan trọng.
+Cơ sở dữ liệu nghiệp vụ gồm bốn bảng chính:
 
-Các khóa chính sử dụng UUID. Những trường thời gian sử dụng kiểu dữ liệu có thông tin múi giờ để hỗ trợ lưu trữ thời điểm tạo và cập nhật dữ liệu.
-
-### 4.2. Các bảng chính
-
-**Bảng `users`**
-
-Lưu thông tin người dùng, bao gồm mã định danh, họ tên, email, mật khẩu đã băm, vai trò, trạng thái hoạt động và thời gian tạo/cập nhật.
-
-Email phải là duy nhất. Mật khẩu được lưu dưới dạng hash, không lưu trực tiếp mật khẩu gốc.
-
-**Bảng `tickets`**
-
-Lưu thông tin yêu cầu hỗ trợ, bao gồm mã ticket, tiêu đề, mô tả, danh mục, mức độ ưu tiên, trạng thái, người tạo, người được phân công và các mốc thời gian xử lý.
-
-Các trạng thái được sử dụng gồm:
-
-- `OPEN`
-- `IN_PROGRESS`
-- `RESOLVED`
-- `CLOSED`
-
-Các mức độ ưu tiên gồm `LOW`, `MEDIUM`, `HIGH` và `URGENT`.
-
-`requester_id` xác định người tạo yêu cầu; `assignee_id` xác định nhân viên được phân công xử lý. Hai trường này cùng tham chiếu đến bảng `users`.
-
-**Bảng `comments`**
-
-Lưu các bình luận thuộc một ticket, bao gồm mã ticket, người viết, nội dung và thời gian tạo.
-
-**Bảng `ticket_events`**
-
-Lưu lại các sự kiện quan trọng, chẳng hạn như tạo ticket, thay đổi người phụ trách, thay đổi trạng thái hoặc mức độ ưu tiên. Các trường `old_value` và `new_value` cho phép ghi lại thông tin trước và sau thay đổi dưới dạng JSONB.
-
-### 4.3. Quan hệ giữa các bảng
-
-- Một người dùng có thể tạo nhiều ticket.
-- Một nhân viên hỗ trợ có thể được phân công nhiều ticket.
-- Một ticket có thể có nhiều bình luận.
-- Một người dùng có thể viết nhiều bình luận.
-- Một ticket có thể có nhiều sự kiện lịch sử.
-- Một người dùng có thể thực hiện nhiều sự kiện được ghi nhận.
-
-Các khóa ngoại giúp đảm bảo tính toàn vẹn tham chiếu giữa các bảng. Quyền xem và chỉnh sửa dữ liệu vẫn cần được kiểm tra tại tầng nghiệp vụ.
-
-### 4.4. Ràng buộc và tính toàn vẹn dữ liệu
-
-Thiết kế cơ sở dữ liệu chú trọng các điểm sau:
-
-- Email người dùng và mã ticket phải duy nhất.
-- Các khóa ngoại phải tham chiếu đến bản ghi hợp lệ.
-- Vai trò, trạng thái và mức độ ưu tiên phải thuộc tập giá trị được cho phép.
-- Các trường thường dùng để lọc ticket cần được cân nhắc đánh chỉ mục.
-- Tạo ticket và ghi sự kiện khởi tạo phải thuộc cùng một transaction.
-- Thay đổi trạng thái hoặc người phụ trách và ghi lịch sử tương ứng phải được thực hiện nhất quán.
-
+- **users:** tài khoản, vai trò và trạng thái hoạt động.
+- **tickets:** yêu cầu hỗ trợ, người tạo, người phụ trách, trạng thái và mức ưu tiên.
+- **comments:** nội dung trao đổi trên ticket.
+- **ticket_events:** lịch sử sự kiện và giá trị trước/sau thay đổi.
 
 ![Entity Relationship Diagram](docs/images/erd.png)
 
-## 5. Hướng dẫn khởi động dự án
+Các trạng thái ticket được sử dụng là OPEN, IN_PROGRESS, RESOLVED và CLOSED. Mức ưu tiên gồm LOW, MEDIUM, HIGH và URGENT. Chi tiết cột, khóa ngoại và ràng buộc được trình bày trong [docs/erd.md](docs/erd.md).
 
-### 5.1. Yêu cầu môi trường
+## 6. Chạy dự án bằng Docker Compose
 
-Trước khi chạy dự án, cần chuẩn bị:
+### Yêu cầu
 
-- Python 3.11.
-- Docker Desktop và Docker Compose.
-- Git nếu cần tải mã nguồn từ repository.
+- Git
+- Docker Desktop có Docker Compose
 
-Các lệnh bên dưới được thực hiện tại thư mục gốc của dự án bằng PowerShell.
-
-### 5.2. Lấy mã nguồn
-
-Nếu dự án đã có trên GitHub, chạy:
+### Bước 1: Tải mã nguồn
 
 ```powershell
-git clone <REPOSITORY_URL>
-cd Service-Desk-Issue-Tracking
+git clone https://github.com/VuHuuThinh05/service-desk-issue-tracking.git
+cd service-desk-issue-tracking
 ```
 
-Thay `<REPOSITORY_URL>` bằng địa chỉ repository thực tế.
-
-Nếu mã nguồn đã có trên máy, chỉ cần mở thư mục dự án trong VS Code và mở terminal tại thư mục gốc.
-
-### 5.3. Cấu hình biến môi trường
-
-Kiểm tra các biến môi trường mà ứng dụng yêu cầu, đặc biệt là:
-
-- Chuỗi kết nối PostgreSQL.
-- Khóa bí mật dùng để ký JWT.
-- Các thông số xác thực cần thiết khác.
-
-Nếu repository có tệp `.env.example`, sao chép thành `.env`:
+### Bước 2: Tạo file cấu hình
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-Sau đó chỉnh các giá trị trong `.env` theo cấu hình cục bộ.
+Mở .env và thay các giá trị mẫu, đặc biệt là POSTGRES_PASSWORD và JWT_SECRET_KEY. Không commit file .env hoặc secret thực tế lên GitHub.
 
-Không đưa `.env`, mật khẩu hoặc khóa bí mật thực tế lên GitHub.
-
-### 5.4. Khởi động bằng Docker Compose
-
-Tại thư mục chứa tệp Compose thực tế, chạy:
+### Bước 3: Khởi động dịch vụ
 
 ```powershell
 docker compose up --build -d
-```
-
-Lệnh trên yêu cầu Docker Compose đọc cấu hình dịch vụ, build image nếu cần và khởi động các container ở chế độ nền.
-
-Kiểm tra trạng thái dịch vụ:
-
-```powershell
 docker compose ps
 ```
 
-Xem log khi cần kiểm tra lỗi:
+Docker Compose định nghĩa hai dịch vụ:
+- **db:** PostgreSQL 16, dữ liệu lưu trong Docker volume.
+- **api:** FastAPI, công bố cổng 8000.
+
+Cấu hình Compose truyền thông tin kết nối database cho API qua hostname nội bộ db và cổng 5432. Cổng PostgreSQL trên máy host được đặt bằng POSTGRES_HOST_PORT trong file .env.
+
+Xem log khi cần:
 
 ```powershell
 docker compose logs --tail 100
 ```
 
-Nếu tệp Compose có tên khác hoặc nằm trong thư mục con, cần chỉ định đúng đường dẫn bằng tùy chọn `-f`.
+### Bước 4: Khởi tạo schema
 
-### 5.5. Khởi tạo cơ sở dữ liệu
-
-Sau khi dịch vụ database đã sẵn sàng, chạy migration bằng Alembic từ môi trường Python đã được cấu hình:
+Migration được quản lý bằng Alembic. Khi chạy lệnh migration từ máy host, cần có môi trường Python đã cài dependencies và file .env được cấu hình để kết nối đúng database:
 
 ```powershell
+python -m pip install -r requirements.txt
 alembic upgrade head
 ```
 
-Lệnh này áp dụng các migration đang có để đưa cấu trúc cơ sở dữ liệu về phiên bản mới nhất của dự án.
+Không chạy migration từ môi trường host nếu cấu hình kết nối chưa trỏ đúng tới database đang sử dụng. Hãy kiểm tra log và trạng thái schema trước khi chạy migration để tránh thao tác nhầm database.
 
-Chỉ chạy lệnh sau khi đã cài các thư viện cần thiết và cấu hình kết nối database đúng với môi trường hiện tại.
+## 7. Địa chỉ truy cập
 
-### 5.6. Cài thư viện và chạy backend thủ công
+Với cấu hình cổng mặc định trong dự án:
 
-Nếu muốn chạy backend ngoài Docker, có thể tạo môi trường ảo:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-```
-
-Sau khi hoàn tất cấu hình môi trường, khởi chạy ứng dụng bằng Uvicorn với module entry point thực tế của repository. Ví dụ, nếu ứng dụng được khai báo tại `app.main:app`:
-
-```powershell
-uvicorn app.main:app --reload
-```
-
-Không cần chạy backend thủ công nếu Docker Compose đã quản lý dịch vụ API.
-
-### 5.7. Kiểm tra trạng thái hoạt động
-
-Sau khi khởi động, kiểm tra:
-
-- Container của API và PostgreSQL đã chạy.
-- Kết nối cơ sở dữ liệu hoạt động.
-- Migration đã được áp dụng thành công.
-- API có thể truy cập từ trình duyệt hoặc công cụ gửi HTTP request.
-
-Nếu gặp lỗi, kiểm tra log của dịch vụ liên quan trước khi thay đổi cấu hình.
-
-## 6. Truy cập ứng dụng
-
-Sau khi hệ thống khởi động thành công, các địa chỉ truy cập phụ thuộc vào cổng được cấu hình trong Docker Compose hoặc cấu hình chạy backend.
-
-### 6.1. Giao diện API
+| Thành phần | Địa chỉ |
+|---|---|
+| Giao diện demo | http://localhost:8000/ |
+| Swagger UI | http://localhost:8000/docs |
+| ReDoc | http://localhost:8000/redoc |
+| Health check | http://localhost:8000/health |
 
 ![Swagger UI](docs/images/api-docs.png)
 
-Swagger UI cho phép xem danh sách endpoint, cấu trúc request/response và gửi thử các request trực tiếp từ trình duyệt.
-
-**ReDoc**
-
-[Chèn link ReDoc tại đây]
-
-ReDoc cung cấp cách trình bày tài liệu API theo cấu trúc, thuận tiện để tra cứu các endpoint và schema.
-
-### 6.2. Giao diện demo
-
 ![Ticket Management Interface](docs/images/ticket-interface.png)
 
-Giao diện demo giúp người dùng quan sát cách hệ thống hiển thị và thao tác với các ticket. Địa chỉ cụ thể cần căn cứ vào cổng được công bố trong cấu hình triển khai.
+Health check trả về trạng thái ứng dụng. Điều này không thay thế việc kiểm tra riêng kết nối database và các thao tác nghiệp vụ.
 
-## 7. Hình ảnh minh họa
+## 8. API chính
 
-Phần này cung cấp hình ảnh minh chứng cho kiến trúc, thiết kế dữ liệu, giao diện và kết quả kiểm thử của dự án. Các hình ảnh được đặt trong thư mục `docs/images/` để thuận tiện quản lý và hiển thị trong README.
+Các endpoint được đăng ký dưới tiền tố /api/v1.
 
+| Nhóm | Endpoint | Mục đích |
+|---|---|---|
+| Auth | POST /api/v1/auth/login | Đăng nhập, nhận access token |
+| Auth | GET /api/v1/auth/me | Lấy thông tin người dùng hiện tại |
+| Users | GET /api/v1/users | Liệt kê người dùng (Admin) |
+| Users | POST /api/v1/users | Tạo người dùng (Admin) |
+| Users | PATCH /api/v1/users/{user_id}/status | Bật/tắt tài khoản (Admin) |
+| Tickets | POST /api/v1/tickets | Tạo ticket |
+| Tickets | GET /api/v1/tickets | Liệt kê ticket theo quyền; hỗ trợ status, limit, offset |
+| Tickets | GET /api/v1/tickets/{ticket_id} | Xem chi tiết ticket |
+| Tickets | POST /api/v1/tickets/{ticket_id}/assign | Phân công ticket |
+| Tickets | POST /api/v1/tickets/{ticket_id}/transitions | Chuyển trạng thái |
+| Comments | GET /api/v1/tickets/{ticket_id}/comments | Xem bình luận |
+| Comments | POST /api/v1/tickets/{ticket_id}/comments | Thêm bình luận |
+| Events | GET /api/v1/tickets/{ticket_id}/events | Xem lịch sử sự kiện |
+| Dashboard | GET /api/v1/dashboard/summary | Lấy thống kê tổng hợp |
 
-### 7.1. Luồng xử lý yêu cầu
+Swagger UI tại /docs là nguồn tham khảo trực tiếp để xem schema request/response hiện hành.
 
-Hình ảnh mô tả quá trình một request đi từ client qua các tầng xử lý, truy cập cơ sở dữ liệu và trả về response.
+## 9. Kiểm thử
 
-![Luồng xử lý yêu cầu](docs/images/request-processing-flow.png)
+Chạy bộ kiểm thử từ thư mục gốc khi đã cài dependencies:
 
+```powershell
+python -m pytest -v
+```
 
-### 7.2 . Trạng thái các dịch vụ Docker
+Bộ test hiện có tập trung vào xác thực, người dùng và ticket. Cần đọc fixture trong tests/conftest.py để xác định loại database được sử dụng khi test; kết quả test dùng SQLite không đồng nghĩa với việc đã kiểm thử tích hợp trên PostgreSQL.
 
-Hình ảnh minh chứng trạng thái hoạt động của các container trong môi trường triển khai cục bộ.
+![Test Results](docs/images/test-results.png)
 
-![Trạng thái các dịch vụ Docker](docs/images/docker-services.png)
+Kết quả và số lượng test trong ảnh cần được cập nhật từ lần chạy thực tế gần nhất, không nên dùng ảnh cũ nếu kết quả đã thay đổi.
 
-### 7.3. Kết quả kiểm thử tự động
+## 10. Hình ảnh minh chứng khác
 
-Dự án sử dụng `pytest` để kiểm tra các chức năng và quy tắc nghiệp vụ. Các bài kiểm thử có thể bao gồm xác thực, thao tác với ticket, phân quyền, kiểm tra trạng thái và xử lý các trường hợp dữ liệu không hợp lệ.
+### Luồng xử lý request
 
-Kết quả kiểm thử được sử dụng để phát hiện lỗi và xác nhận hành vi của hệ thống trước khi hoàn thiện dự án.
+![Request Processing Flow](docs/images/request-processing-flow.png)
 
-![Kết quả kiểm thử tự động](docs/images/test-results.png)
+### Dịch vụ Docker
 
+![Docker Services](docs/images/docker-services.png)
 
-## 8. Hướng phát triển
+## 11. Giới hạn hiện tại và hướng phát triển
 
-Trong các phiên bản tiếp theo, dự án có thể được mở rộng theo các hướng sau:
+Các hướng mở rộng có thể cân nhắc trong tương lai:
 
-- **Hoàn thiện phân quyền:** bổ sung và kiểm tra đầy đủ quyền truy cập theo vai trò, người tạo ticket và nhân viên được phân công.
-- **Mở rộng nghiệp vụ:** bổ sung SLA, thời hạn xử lý và cơ chế cảnh báo ticket quá hạn.
-- **Cải thiện thống kê:** xây dựng dashboard theo trạng thái, mức độ ưu tiên, danh mục và thời gian xử lý.
-- **Nâng cao kiểm thử:** bổ sung kiểm thử tích hợp với PostgreSQL thực tế, kiểm thử lỗi và kiểm thử các trường hợp đồng thời.
-- **Tăng cường bảo mật:** bổ sung giới hạn tần suất request, chính sách quản lý token và các biện pháp bảo vệ API phù hợp.
-- **Tự động hóa triển khai:** xây dựng CI để tự động chạy kiểm thử và kiểm tra chất lượng mã nguồn khi có thay đổi.
-- **Cải thiện giao diện:** hoàn thiện trải nghiệm người dùng, thông báo lỗi và khả năng theo dõi tiến độ xử lý ticket.
-- **Triển khai môi trường thực tế:** xây dựng cấu hình production riêng, quản lý secrets và thiết lập logging, monitoring phù hợp.
+- Bổ sung bộ lọc ticket theo mức ưu tiên và người phụ trách nếu cần.
+- Bổ sung SLA, thời hạn xử lý và cảnh báo ticket quá hạn.
+- Mở rộng dashboard và các chỉ số thời gian xử lý.
+- Bổ sung kiểm thử tích hợp trực tiếp với PostgreSQL.
+- Thiết lập CI để tự động chạy test khi có thay đổi.
+- Hoàn thiện cấu hình production, logging và quản lý secret.
 
-## Kết luận
-
-Service Desk Issue Tracking là dự án thực hành xây dựng backend có cấu trúc rõ ràng, kết hợp API, cơ sở dữ liệu quan hệ, xác thực, phân quyền, kiểm thử tự động và container hóa.
-
-Thông qua dự án, các kiến thức về thiết kế hệ thống, quản lý dữ liệu, xử lý nghiệp vụ và triển khai ứng dụng được kết hợp trong một bài toán gần với nhu cầu hỗ trợ kỹ thuật tại doanh nghiệp.
+Đây là các hướng phát triển đề xuất, không phải cam kết rằng những chức năng đó đã có trong phiên bản hiện tại.
