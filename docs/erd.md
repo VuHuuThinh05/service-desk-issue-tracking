@@ -126,11 +126,11 @@ Lưu lại các sự kiện quan trọng để theo dõi quá trình xử lý y�
 Ví dụ về các loại sự kiện ở cấp ứng dụng:
 
 - `TICKET_CREATED`: Tạo yêu cầu.
-- `ASSIGNEE_CHANGED`: Thay đổi người phụ trách.
+- `TICKET_ASSIGNED`: Phân công người phụ trách.
 - `STATUS_CHANGED`: Thay đổi trạng thái.
-- `PRIORITY_CHANGED`: Thay đổi mức độ ưu tiên.
+- `COMMENT_ADDED`: Thêm bình luận.
 
-Các giá trị trên là ví dụ nghiệp vụ; database hiện tại chưa được xác nhận có CHECK constraint giới hạn `event_type` vào một danh sách cố định.
+Bốn loại sự kiện trên được sử dụng trong mã nguồn hiện tại (`app/services/ticket_service.py` và `app/api/v1/tickets.py`). Cột `event_type` trong migration là `VARCHAR(40)` và không có CHECK constraint giới hạn các giá trị.
 
 Các sự kiện lịch sử nên được ghi thêm thay vì chỉnh sửa trong quá trình vận hành thông thường.
 
@@ -176,7 +176,7 @@ Các ràng buộc đã xác minh:
 - `tickets.status` mặc định `OPEN`.
 - Các cột thời gian được liệt kê trong thiết kế có giá trị mặc định `now()` theo kết quả kiểm tra database.
 
-Lưu ý: `DEFAULT now()` chỉ cung cấp giá trị mặc định khi chèn bản ghi nếu không truyền giá trị khác. Nó không tự động cập nhật `updated_at` mỗi khi bản ghi được sửa.
+Lưu ý: `DEFAULT now()` ở database chỉ cung cấp giá trị khi INSERT. Trong SQLAlchemy models, `updated_at` còn được cấu hình `onupdate=func.now()` để SQLAlchemy cập nhật khi thực hiện UPDATE thông qua ORM; migration không tạo database trigger tự cập nhật cho mọi câu lệnh SQL.
 
 ## 8. Chỉ mục
 
