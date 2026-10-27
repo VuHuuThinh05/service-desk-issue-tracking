@@ -38,11 +38,11 @@ Chứa các quy tắc xử lý chính của hệ thống, bao gồm:
 - Ghi nhận lịch sử xử lý.
 - Bảo đảm các thao tác liên quan được thực hiện nhất quán.
 
-Các quy tắc nghiệp vụ được tập trung tại lớp này thay vì viết rải rác trong các API endpoint.
+Các quy tắc tạo, phân công và chuyển trạng thái ticket được tập trung tại `app/services/ticket_service.py`. Một số thao tác như bình luận, danh sách ticket, quản lý người dùng và dashboard vẫn được xử lý trong router tương ứng; chưa tách thành service độc lập.
 
 ### 3.3. Lớp truy cập dữ liệu
 
-Chịu trách nhiệm thực hiện các truy vấn và thao tác lưu dữ liệu thông qua SQLAlchemy. Lớp này giúp tách biệt việc truy cập cơ sở dữ liệu khỏi các quy tắc nghiệp vụ.
+Sử dụng SQLAlchemy models, engine và session trong `app/models/` và `app/db/`. Ticket Service và một số API router đều truy vấn SQLAlchemy trực tiếp; dự án chưa có Repository layer hoặc package repository riêng.
 
 ### 3.4. Lớp mô hình dữ liệu
 
@@ -65,8 +65,8 @@ Luồng xử lý cơ bản của hệ thống:
 Người dùng hoặc giao diện  
 → API Router của FastAPI  
 → Xác thực và phân quyền  
-→ Lớp nghiệp vụ  
-→ Lớp truy cập dữ liệu  
+→ Ticket Service (khi endpoint cần xử lý workflow) hoặc SQLAlchemy trực tiếp từ router  
+→ SQLAlchemy session/models  
 → PostgreSQL  
 → Trả kết quả HTTP cho người dùng.
 
@@ -76,10 +76,10 @@ Các quy tắc nghiệp vụ quan trọng phải được kiểm tra ở phía B
 
 - **auth:** Đăng nhập và xác định người dùng hiện tại.
 - **users:** Quản lý tài khoản và trạng thái hoạt động của người dùng.
-- **tickets:** Tạo, xem, lọc, cập nhật và phân công ticket.
-- **workflow:** Kiểm tra và xử lý việc chuyển trạng thái ticket.
-- **comments:** Quản lý nội dung trao đổi trong ticket.
-- **events:** Ghi nhận lịch sử thay đổi và người thực hiện.
+- **tickets:** Tạo, xem, lọc theo trạng thái, phân công ticket, chuyển trạng thái, bình luận và đọc sự kiện.
+- **ticket workflow:** Logic chuyển trạng thái nằm trong `app/services/ticket_service.py`, được gọi từ endpoint trong `app/api/v1/tickets.py`.
+- **comments:** Endpoint bình luận nằm trong `app/api/v1/tickets.py`, dùng model `app/models/comment.py`.
+- **ticket events:** Endpoint đọc sự kiện trong `app/api/v1/tickets.py`; `record_event` tại `ticket_service.py` ghi lịch sử vào model `app/models/ticket_event.py`.
 - **dashboard:** Tổng hợp số liệu phục vụ thống kê.
 
 ## 6. Bảo mật
@@ -114,9 +114,9 @@ Kiểm tra các quy tắc chuyển trạng thái, điều kiện phân quyền v
 
 Kiểm tra đăng nhập, tạo và xem ticket, phân công, chuyển trạng thái, bình luận và lọc dữ liệu.
 
-### 8.3. Kiểm thử tích hợp
+### 8.3. Kiểm thử tích hợp (định hướng mở rộng)
 
-Kiểm tra sự phối hợp giữa API, lớp nghiệp vụ và PostgreSQL, bao gồm việc lưu dữ liệu và xử lý giao dịch.
+Bộ test hiện tại override database bằng SQLite in-memory (`tests/conftest.py`). Kiểm thử tích hợp trực tiếp với PostgreSQL và môi trường Docker là hướng bổ sung trong tương lai; chưa nên coi là đã được triển khai.
 
 ### 8.4. Kiểm thử trường hợp lỗi
 
