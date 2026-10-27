@@ -1,7 +1,7 @@
 """Tao cac bang ban dau
 
 Revision ID: aa5598ecb1f6
-Revises: 
+Revises:
 Create Date: 2026-10-26 17:02:02.739882
 
 """
