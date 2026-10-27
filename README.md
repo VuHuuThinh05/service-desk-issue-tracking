@@ -65,16 +65,17 @@ Hệ thống quản lý yêu cầu hỗ trợ nội bộ (**service desk**), nơ
 
 Hệ thống theo kiểu **modular monolith**: một backend FastAPI chứa các module riêng, kết nối đến một cơ sở dữ liệu PostgreSQL. Các thành phần chính:
 
-| Lớp / thành phần | Trách nhiệm |
+| Lớp / thành phần | Trách nhiệm trong kiến trúc hiện tại |
 |---|---|
-| **Presentation (Frontend)** | `frontend/` gồm HTML, CSS và JavaScript. FastAPI phục vụ tệp tĩnh tại `/`; frontend gọi REST API để thao tác ticket. |
-| **API Layer (Routers)** | `app/api/v1/` nhận request cho auth, users, tickets và dashboard; trả HTTP response theo schema. |
-| **Validation & Security** | Pydantic xác thực dữ liệu; `get_current_user` kiểm tra JWT và tài khoản đang hoạt động; kiểm tra vai trò và quyền truy cập tài nguyên tại backend. |
-| **Business Logic** | `app/services/ticket_service.py` xử lý tạo/phân công ticket, chuyển trạng thái, kiểm tra quyền và ghi lịch sử. |
-| **Persistence Layer** | SQLAlchemy models và session thực hiện đọc/ghi dữ liệu. **Một số router truy vấn SQLAlchemy trực tiếp**; dự án không có package Repository riêng. |
-| **Database** | PostgreSQL lưu các bảng `users`, `tickets`, `comments`, `ticket_events`. |
-| **Migration** | Alembic quản lý thay đổi cấu trúc bảng. Migration là thao tác riêng, **không tự động chạy** chỉ bởi `docker compose up`. |
-| **Runtime / Containers** | `Dockerfile` đóng gói FastAPI; `docker-compose.yml` chạy `api` và `db`, kết nối qua hostname nội bộ `db:5432` và duy trì dữ liệu PostgreSQL bằng named volume. |
+| **Client / Frontend** | Người dùng truy cập qua trình duyệt hoặc API client. Thư mục `frontend/` chứa HTML, CSS, JavaScript; FastAPI phục vụ giao diện tại `/` và nhận request HTTP/JSON. |
+| **API Container — FastAPI** | Dockerfile đóng gói backend Python và frontend vào image API. `app/main.py` đăng ký router `auth`, `users`, `tickets`, `dashboard`; Uvicorn chạy ứng dụng trên cổng `8000`. |
+| **Validation — Pydantic** | Các schema trong `app/schemas/` xác thực dữ liệu đầu vào và định dạng dữ liệu trả về; Pydantic không phải một dịch vụ/container riêng. |
+| **Authentication & Security — JWT / Argon2** | `app/api/deps.py` dùng `get_current_user` để xác thực JWT và kiểm tra tài khoản; `app/core/security.py` xử lý tạo token và băm/xác minh mật khẩu bằng Argon2. Kiểm tra quyền vai trò/ticket được thực hiện trong các router và service. |
+| **Business Logic — Ticket Service** | `app/services/ticket_service.py` triển khai quy tắc tạo/phân công ticket, kiểm tra quyền, chuyển trạng thái và ghi lịch sử sự kiện. Một số endpoint xử lý truy vấn SQLAlchemy ngay trong router. |
+| **Data Access — SQLAlchemy** | `app/db/` cung cấp engine/session; `app/models/` ánh xạ bảng. SQLAlchemy thực hiện truy vấn và giao dịch với PostgreSQL, **không có lớp Repository riêng**. |
+| **DB Container — PostgreSQL** | Docker Compose chạy PostgreSQL 16 trong service `db`, lưu bốn bảng nghiệp vụ `users`, `tickets`, `comments`, `ticket_events`; named volume `service_desk_data` giữ dữ liệu qua các lần tạo lại container thông thường. |
+| **Schema Migration — Alembic** | `migrations/` và `alembic.ini` quản lý phiên bản schema. Theo cấu hình hiện có, migration chạy bằng **lệnh riêng từ máy host** sau khi PostgreSQL khởi động; Alembic **không phải container/service độc lập** và `docker compose up` không tự thực thi migration. |
+| **Docker Compose & Testing** | `docker-compose.yml` điều phối **hai container `api` và `db`**, kết nối qua `db:5432` trong mạng Docker. `pytest` / `HTTPX` / `TestClient` là công cụ kiểm thử chạy ngoài hai service này, không phải thành phần vận hành liên tục. |
 
 ### Luồng xử lý request
 
