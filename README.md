@@ -381,8 +381,6 @@ Các ảnh được lưu trong `docs/images/` nhằm giúp người xem reposito
 
 *Hình 7 — Kết quả chạy pytest. Khi cập nhật code hoặc test, cần chụp lại kết quả tương ứng; ảnh chỉ phản ánh lần chạy tại thời điểm chụp.*
 
-Ba sơ đồ **System Architecture**, **Request Processing Flow** và **ERD** được đặt tại các mục 3 và 5 để giải thích thiết kế cùng nội dung liên quan, thay vì lặp lại ở phần ảnh minh chứng.
-
 ## 10. Giới hạn và hướng phát triển
 
 Dự án hiện ưu tiên các nghiệp vụ backend cốt lõi. Một số hướng mở rộng **chưa triển khai**:
@@ -401,4 +399,3 @@ Dự án hiện ưu tiên các nghiệp vụ backend cốt lõi. Một số hư�
 
 ---
 
-*Dự án được xây dựng với mục tiêu thực hành backend engineering: API design, authentication & authorization, business rules, relational data modeling, migrations, testing và containerized deployment.*
